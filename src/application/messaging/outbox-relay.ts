@@ -30,19 +30,20 @@ export class OutboxRelay {
     if (claimed.length === 0) return 0;
 
     const results = await this.publisher.publish(claimed);
-    let published = 0;
+    const now = this.clock.now();
     for (const message of claimed) {
       const result = results.get(message.id) ?? { ok: false as const, error: 'no result from publisher' };
       if (result.ok) {
-        message.markPublished(this.clock.now());
-        published++;
+        message.markPublished(now);
       } else {
-        message.scheduleRetry(this.clock.now(), result.error);
+        message.scheduleRetry(now, result.error);
         this.metrics.outboxPublishFailed();
         this.metrics.retry({ operation: 'outbox_publish', reason: 'publish_failed' });
       }
-      await this.store.release(this.options.owner, message);
     }
+    // Um único round-trip para o lote publicado (antes: um UPDATE por mensagem).
+    await this.store.releaseBatch(this.options.owner, claimed);
+    const published = claimed.filter((m) => m.publishedAt).length;
     if (published > 0) this.metrics.outboxPublished(published);
     return published;
   }

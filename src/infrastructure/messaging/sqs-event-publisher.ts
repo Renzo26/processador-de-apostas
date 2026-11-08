@@ -29,6 +29,21 @@ export class SqsEventPublisher implements EventPublisher {
       return results;
     }
 
+    // Faixas paralelas particionadas por aggregateId: os eventos de um mesmo aggregate
+    // ficam sempre na mesma faixa (enviados em sequência, na ordem da outbox), e
+    // aggregates diferentes são enviados em paralelo.
+    const lanes = Array.from({ length: PARALLEL_LANES }, () => [] as OutboxMessage[]);
+    for (const m of messages) lanes[laneOf(m.aggregateId)]!.push(m);
+
+    await Promise.all(lanes.filter((lane) => lane.length > 0).map((lane) => this.sendLane(queueUrl, lane, results)));
+    return results;
+  }
+
+  private async sendLane(
+    queueUrl: string,
+    messages: OutboxMessage[],
+    results: Map<string, { ok: true } | { ok: false; error: string }>,
+  ): Promise<void> {
     for (let i = 0; i < messages.length; i += SQS_BATCH_LIMIT) {
       const chunk = messages.slice(i, i + SQS_BATCH_LIMIT);
       try {
@@ -52,8 +67,19 @@ export class SqsEventPublisher implements EventPublisher {
         for (const m of chunk) results.set(m.id, { ok: false, error: describe(error) });
       }
     }
-    return results;
   }
+}
+
+const PARALLEL_LANES = 8;
+
+/** Hash simples e estável (FNV-1a) do aggregateId → índice da faixa. */
+function laneOf(aggregateId: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < aggregateId.length; i++) {
+    hash ^= aggregateId.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0) % PARALLEL_LANES;
 }
 
 function describe(error: unknown): string {

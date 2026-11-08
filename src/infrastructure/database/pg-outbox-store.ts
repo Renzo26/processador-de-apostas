@@ -31,23 +31,27 @@ export class PgOutboxStore implements OutboxStore {
     return rows.sort((a, b) => Number(a.seq) - Number(b.seq)).map(toOutbox);
   }
 
-  async release(owner: string, message: OutboxMessage): Promise<void> {
-    if (message.publishedAt) {
-      // published_at IS NULL: se outra instância (lease vencido) já marcou, não há o que fazer.
+  async releaseBatch(owner: string, messages: OutboxMessage[]): Promise<void> {
+    const published = messages.filter((m) => m.publishedAt);
+    if (published.length > 0) {
+      // Um statement para o lote inteiro. published_at IS NULL: se outra instância
+      // (lease vencido) já marcou alguma, ela é simplesmente ignorada.
       await this.exec(
         `UPDATE outbox_messages SET published_at = ?, locked_until = NULL, locked_by = NULL, last_error = NULL
-          WHERE id = ? AND published_at IS NULL`,
-        [message.publishedAt, message.id],
+          WHERE id IN (?) AND published_at IS NULL`,
+        [published[0]!.publishedAt, published.map((m) => m.id)],
         'run',
       );
-      return;
     }
-    await this.exec(
-      `UPDATE outbox_messages SET attempts = ?, next_attempt_at = ?, last_error = ?, locked_until = NULL, locked_by = NULL
-        WHERE id = ? AND published_at IS NULL AND locked_by = ?`,
-      [message.attempts, message.nextAttemptAt, message.lastError ?? null, message.id, owner],
-      'run',
-    );
+    // Falhas são raras e cada uma tem seu próprio backoff: uma atualização por mensagem.
+    for (const message of messages.filter((m) => !m.publishedAt)) {
+      await this.exec(
+        `UPDATE outbox_messages SET attempts = ?, next_attempt_at = ?, last_error = ?, locked_until = NULL, locked_by = NULL
+          WHERE id = ? AND published_at IS NULL AND locked_by = ?`,
+        [message.attempts, message.nextAttemptAt, message.lastError ?? null, message.id, owner],
+        'run',
+      );
+    }
   }
 
   async stats(now: Date): Promise<{ pending: number; oldestAgeSeconds: number }> {

@@ -17,8 +17,11 @@ export interface OutboxStore {
    * se o processo morrer, o lease expira e outra instância assume.
    */
   claim(owner: string, limit: number, leaseMs: number, now: Date): Promise<OutboxMessage[]>;
-  /** Grava o resultado do ciclo (publicada ou reagendada) e libera o lease. */
-  release(owner: string, message: OutboxMessage): Promise<void>;
+  /**
+   * Grava o resultado do ciclo (publicadas ou reagendadas) e libera o lease.
+   * As publicadas são marcadas num único statement.
+   */
+  releaseBatch(owner: string, messages: OutboxMessage[]): Promise<void>;
   stats(now: Date): Promise<{ pending: number; oldestAgeSeconds: number }>;
 }
 

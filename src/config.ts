@@ -31,7 +31,7 @@ const schema = z.object({
 
   OUTBOX_PUBLISHER_ENABLED: flag(true),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(500),
-  OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(50),
+  OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().default(200),
   OUTBOX_LEASE_MS: z.coerce.number().int().positive().default(30_000),
 
   PENDING_REFERENCE_WORKER_ENABLED: flag(true),
