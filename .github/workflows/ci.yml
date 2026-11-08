@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck e testes (unidade, integração, e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Instalar dependências
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Testes de unidade
+        run: bun run test:unit
+
+      # Mesma infraestrutura do desenvolvimento: PostgreSQL + LocalStack + criação das filas.
+      - name: Subir PostgreSQL e LocalStack
+        run: |
+          docker compose up -d postgres sqs sqs-init
+          docker compose wait sqs-init
+          for i in $(seq 1 30); do
+            docker compose exec -T postgres pg_isready -U wagering -d wagering && break
+            sleep 2
+          done
+
+      - name: Testes de integração (PostgreSQL e SQS reais)
+        run: bun run test:integration
+
+      - name: Testes e2e (3 processos reais da aplicação)
+        run: bun run test:e2e
+
+      - name: Logs da infraestrutura (em caso de falha)
+        if: failure()
+        run: docker compose logs --no-color --tail=200
