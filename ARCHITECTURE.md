@@ -336,6 +336,8 @@ O trade-off é mais SQL escrito à mão (com testes de integração cobrindo cad
 | `test/integration/sqs-consumer` | inbox/redelivery, **crash depois do commit e antes do ack**, retry transitório, DLQ por limite, DLQ por payload inválido, rejeição terminal, stop gracioso | PostgreSQL + LocalStack |
 | `test/e2e/multi-instance` | **3 processos reais**: hot wallet via HTTP, 50× em paralelo, SQS com duplicatas, outbox drenada, **SIGKILL depois do commit e antes do ack** (fault injection), SIGTERM gracioso, **reinício sob carga com consistência final** | PostgreSQL + LocalStack + 3 processos |
 
+**Teste de carga** (`bun run test:load`, [docs/LOAD_TEST.md](docs/LOAD_TEST.md)): 3 instâncias reais, cenário distribuído e hot wallet. Mede throughput, p50/p95/p99, erros, conflitos e outbox lag, e verifica a consistência de todas as wallets ao final. A primeira execução revelou um gargalo no relay da outbox (um `UPDATE` por evento e envio sequencial ao SQS). A correção (marcação em lote e faixas paralelas por `aggregateId`) multiplicou o throughput por 2,2 e reduziu em 6,5× o tempo de esvaziamento da outbox.
+
 **Invariante verificado em todos os testes de integração:** `wallet.balance == saldo reconstruído pelo ledger` (via reconciliação). PostgreSQL e SQS **nunca** são substituídos por mocks. Os únicos dublês são falhas injetadas (cliente SQS que "morre" no ack, publisher que falha) para exercitar caminhos de erro de forma determinística.
 
 ---

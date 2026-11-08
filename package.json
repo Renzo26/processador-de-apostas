@@ -13,7 +13,8 @@
     "test": "bun test --timeout 90000",
     "test:unit": "bun test src",
     "test:integration": "bun test test/integration --timeout 60000",
-    "test:e2e": "bun test test/e2e --timeout 90000"
+    "test:e2e": "bun test test/e2e --timeout 90000",
+    "test:load": "bun scripts/load-test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "^3.1162.0",
