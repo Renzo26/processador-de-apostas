@@ -31,5 +31,10 @@ aws_sqs create-queue \
   --queue-name wager-transactions.fifo \
   --attributes file:///tmp/main-queue-attrs.json >/dev/null
 
+# Fila de eventos de integração publicados pela outbox (consumidores downstream).
+aws_sqs create-queue \
+  --queue-name wallet-events.fifo \
+  --attributes FifoQueue=true,ContentBasedDeduplication=false >/dev/null
+
 echo "Filas SQS prontas:"
 aws_sqs list-queues --output text
