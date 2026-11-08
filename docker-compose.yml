@@ -30,7 +30,8 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health || exit 1"]
       interval: 3s
       timeout: 3s
-      retries: 30
+      retries: 60
+      start_period: 60s
 
   # Provisiona as filas de forma idempotente via AWS CLI, independente do emulador.
   sqs-init:

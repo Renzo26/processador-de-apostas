@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -34,7 +34,10 @@ jobs:
       # Mesma infraestrutura do desenvolvimento: PostgreSQL + LocalStack + criação das filas.
       - name: Subir PostgreSQL e LocalStack
         run: |
-          docker compose up -d postgres sqs sqs-init
+          # Baixa as imagens antes: o download não conta no tempo do healthcheck.
+          docker compose pull --quiet postgres sqs sqs-init
+          docker compose up -d --wait --wait-timeout 180 postgres sqs
+          docker compose up -d sqs-init
           docker compose wait sqs-init
           for i in $(seq 1 30); do
             docker compose exec -T postgres pg_isready -U wagering -d wagering && break
