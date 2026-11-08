@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wagering}
       POSTGRES_DB: ${POSTGRES_DB:-wagering}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -47,6 +47,58 @@ services:
     entrypoint: ["/bin/sh", "/scripts/create-queues.sh"]
     volumes:
       - ./infra/sqs:/scripts:ro
+
+  # Migrations versionadas, executadas uma única vez antes das instâncias.
+  migrate:
+    build: .
+    command: ["bun", "scripts/migrate.ts", "up"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wagering}:${POSTGRES_PASSWORD:-wagering}@postgres:5432/${POSTGRES_DB:-wagering}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["app"]
+
+  # Três instâncias idênticas: a correção não depende de qual delas recebe a requisição/mensagem.
+  app-1: &app
+    build: .
+    environment: &app-env
+      INSTANCE_ID: app-1
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wagering}:${POSTGRES_PASSWORD:-wagering}@postgres:5432/${POSTGRES_DB:-wagering}
+      SQS_ENDPOINT: http://sqs:4566
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      sqs-init:
+        condition: service_completed_successfully
+    stop_grace_period: 30s
+    restart: unless-stopped
+    profiles: ["app"]
+
+  app-2:
+    <<: *app
+    environment:
+      <<: *app-env
+      INSTANCE_ID: app-2
+
+  app-3:
+    <<: *app
+    environment:
+      <<: *app-env
+      INSTANCE_ID: app-3
+
+  lb:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on: [app-1, app-2, app-3]
+    profiles: ["app"]
 
 volumes:
   postgres-data:
