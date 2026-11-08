@@ -58,7 +58,7 @@ Para parar: `docker compose --profile app down`. Para apagar também os dados, a
 | `bun run test:e2e` | sobe **3 processos reais** da aplicação |
 | `bun scripts/send-wager-message.ts <walletId> <playerId> <kind> <amount> [extId] [refExtId]` | publica uma mensagem na fila |
 
-> Os testes de integração e e2e exigem `docker compose up -d` em execução. Eles criam filas SQS exclusivas por teste e isolam os dados por IDs próprios, então não é preciso limpar o banco entre execuções. O ledger é append-only e nem pode ser truncado.
+> Os testes de integração e e2e exigem `docker compose up -d` em execução. Eles usam um **banco exclusivo** (`wagering_test`, criado automaticamente no mesmo PostgreSQL) e **filas SQS exclusivas por teste**, então podem rodar mesmo com a aplicação no ar (`--profile app`) sem interferência. Os dados são isolados por IDs próprios, então não é preciso limpar o banco entre execuções (o ledger é append-only e nem pode ser truncado).
 
 ---
 

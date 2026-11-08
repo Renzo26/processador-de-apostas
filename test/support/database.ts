@@ -9,13 +9,48 @@ import { WagerSettlement } from '../../src/domain/wagering/wager-settlement';
 import { buildOrmConfig } from '../../src/infrastructure/database/mikro-orm.config';
 import { PgUnitOfWork } from '../../src/infrastructure/database/postgres-unit-of-work';
 
+const BASE_URL = process.env.DATABASE_URL ?? 'postgresql://wagering:wagering@localhost:55432/wagering';
+const TEST_DB = process.env.TEST_DATABASE_NAME ?? 'wagering_test';
+
+/**
+ * Banco EXCLUSIVO dos testes (`wagering_test`), no mesmo PostgreSQL do compose.
+ * Sem isso, instâncias da aplicação rodando em paralelo (docker compose --profile app)
+ * consumiriam a mesma outbox/fila e interfeririam nos testes.
+ * Também vale para os processos do e2e, que herdam process.env.DATABASE_URL.
+ */
+export const TEST_DATABASE_URL = (() => {
+  const url = new URL(BASE_URL);
+  url.pathname = `/${TEST_DB}`;
+  return url.toString();
+})();
+process.env.DATABASE_URL = TEST_DATABASE_URL;
+
+let ensured: Promise<void> | undefined;
+async function ensureTestDatabase(): Promise<void> {
+  ensured ??= (async () => {
+    const admin = await MikroORM.init(buildOrmConfig({ clientUrl: BASE_URL, pool: { min: 0, max: 1 } }));
+    try {
+      const rows = await admin.em.fork().execute<{ n: number }[]>('SELECT count(*)::int AS n FROM pg_database WHERE datname = ?', [TEST_DB]);
+      if (rows[0]!.n === 0) {
+        await admin.em.getConnection().execute(`CREATE DATABASE "${TEST_DB}"`).catch((error: { code?: string }) => {
+          if (error.code !== '42P04') throw error; // criado em paralelo por outro arquivo de teste
+        });
+      }
+    } finally {
+      await admin.close();
+    }
+  })();
+  return ensured;
+}
+
 /**
  * Infra real para testes de integração (PostgreSQL em container).
  * Isolamento por dados: cada teste cria wallets/ids próprios — o ledger é
  * append-only e não pode ser truncado, então não há limpeza entre testes.
  */
 export async function setupDatabase(opts: { retryPolicy?: ReferenceRetryPolicy } = {}) {
-  const orm = await MikroORM.init(buildOrmConfig({ pool: { min: 1, max: 30 } }));
+  await ensureTestDatabase();
+  const orm = await MikroORM.init(buildOrmConfig({ clientUrl: TEST_DATABASE_URL, pool: { min: 1, max: 30 } }));
   await orm.migrator.up();
   const uow = new PgUnitOfWork(orm);
   const settlement = new WagerSettlement(opts.retryPolicy ?? ReferenceRetryPolicy.create());
