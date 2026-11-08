@@ -4,6 +4,8 @@ Serviço financeiro que processa transações de apostas (`BET`, `WIN`, `LOSS`, 
 
 **Stack:** Bun 1.4 · TypeScript (strict) · NestJS 12 · PostgreSQL 17 · MikroORM 7 · AWS SQS (LocalStack) · Docker Compose
 
+> **Demo ao vivo (Swagger):** https://portfloio-processa.e4xqua.easypanel.host/docs (3 instâncias + PostgreSQL + SQS; dados fictícios, limite de 20 req/s por IP)
+>
 > Decisões de design, trade-offs e limitações: **[ARCHITECTURE.md](ARCHITECTURE.md)**
 >
 > Teste de carga (metodologia, resultados e análise): **[docs/LOAD_TEST.md](docs/LOAD_TEST.md)**. Resumo: 3.052 req/s com p99 de 47 ms em wallets distribuídas, 425 req/s numa única wallet disputada, zero erros e todas as wallets consistentes.
